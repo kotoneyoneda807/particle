@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>カラフルな軌跡と爆発のパーティクル (最適化済み)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000000;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+
+    <script>
+        // --- 設定 ---
+        const TRAIL_LENGTH = 35;          // 軌跡の長さ (パーティクルの最大数)
+        const TRAIL_DECAY_RATE = 0.95;    // 軌跡の透明度が薄くなる速さ
+        const TRAIL_PARTICLE_SIZE = 2.5;  // 軌跡のパーティクルの基本サイズ
+        const HUE_CHANGE_RATE = 1.5;      // 軌跡の色相が変化する速度
+
+        const FIREWORK_SPAWN_RATE = 5;    // 軌跡パーティクル1つあたりから発生する爆発パーティクルの数
+        const FIREWORK_SPEED = 2;         // 爆発パーティクルの初期速度
+        const FIREWORK_DECAY_RATE = 0.98; // 爆発パーティクルの透明度減少率
+        const FIREWORK_GRAVITY = 0.05;    // 爆発パーティクルにかかる重力
+        const FIREWORK_SIZE = 3;          // 爆発パーティクルの初期サイズ
+
+        // --- 初期化 ---
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const particles = []; // すべてのパーティクルをこの配列で一元管理
+        let currentHue = 0;   // 軌跡の現在の色相
+
+        // キャンバスのサイズ設定
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // --- パーティクルクラスの定義 (構造化のために追加) ---
+        class Particle {
+            constructor(x, y, vx, vy, color, alpha, size, decay, gravity = 0) {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.color = color;
+                this.alpha = alpha;
+                this.size = size;
+                this.decay = decay;
+                this.gravity = gravity;
+                this.isAlive = true; // 生存フラグ
+            }
+
+            update() {
+                // 速度と重力を適用
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += this.gravity;
+                
+                // 透明度を減少
+                this.alpha *= this.decay; 
+                
+                // サイズを減少
+                this.size *= this.decay;
+                
+                // 死亡チェック
+                if (this.alpha < 0.01 || this.size < 0.5) {
+                    this.isAlive = false;
+                }
+            }
+
+            draw() {
+                // HSLの色と現在の透明度を適用
+                ctx.fillStyle = this.color.replace(')', `, ${this.alpha.toFixed(2)})`);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // --- 軌跡パーティクル生成関数 ---
+        function createTrailParticle(x, y, color) {
+            // 軌跡パーティクルは固定の速度を持ちません (vx=0, vy=0)
+            const p = new Particle(
+                x, y, 
+                0, 0, 
+                color, 
+                1.0, 
+                TRAIL_PARTICLE_SIZE, 
+                TRAIL_DECAY_RATE
+            );
+            // 爆発フラグを追加 (クラスに追加せず、オブジェクトに直接設定)
+            p.exploded = false;
+            particles.unshift(p);
+        }
+
+        // --- 爆発パーティクル生成関数 ---
+        function createExplosionParticles(x, y, color) {
+            for (let i = 0; i < FIREWORK_SPAWN_RATE; i++) {
+                const angle = Math.random() * Math.PI * 2; 
+                const speed = Math.random() * FIREWORK_SPEED + 0.5;
+                
+                const p = new Particle(
+                    x, y,
+                    Math.cos(angle) * speed, 
+                    Math.sin(angle) * speed,
+                    color, 
+                    1.0, 
+                    FIREWORK_SIZE, 
+                    FIREWORK_DECAY_RATE,
+                    FIREWORK_GRAVITY // 重力を適用
+                );
+                particles.push(p);
+            }
+        }
+
+        // --- マウスイベント ---
+        document.addEventListener('mousemove', (e) => {
+            // 1. 色相を徐々に変化させる
+            currentHue = (currentHue + HUE_CHANGE_RATE) % 360; 
+            const particleColor = `hsl(${currentHue}, 100%, 65%`; // 注意: alphaは含まない
+
+            // 2. カラフルな軌跡パーティクルを追加
+            createTrailParticle(e.clientX, e.clientY, particleColor);
+        });
+
+        // --- 描画ループ ---
+        function draw() {
+            // 残像効果のためのクリア
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // --- 全パーティクルの更新と描画 ---
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+
+                if (!p.isAlive) continue; // 死亡フラグが立っている場合はスキップ
+
+                // 軌跡パーティクル専用のロジック
+                if (p.vx === 0 && p.vy === 0) {
+                    // 軌跡の長さ制限 (最も古いパーティクルは末尾にあるため、indexが大きい)
+                    if (i > TRAIL_LENGTH) {
+                        p.isAlive = false;
+                        continue; 
+                    }
+                    
+                    // 爆発発生 (軌跡の先端のみ)
+                    // 最初に配列に追加されるのが軌跡パーティクルなので、indexが小さいものが新しい
+                    // ここではインデックスの代わりに、explodedフラグを使って制御
+                    if (!p.exploded && i < 3) {
+                        createExplosionParticles(p.x, p.y, p.color);
+                        p.exploded = true; 
+                    }
+                }
+                
+                p.update();
+                p.draw();
+            }
+
+            // --- 死亡したパーティクルのクリーンアップ (パフォーマンス最適化) ---
+            // filterメソッドを使って、isAliveがtrueのものだけを残す
+            for (let i = particles.length - 1; i >= 0; i--) {
+                if (!particles[i].isAlive) {
+                    particles.splice(i, 1);
+                }
+            }
+
+
+            requestAnimationFrame(draw);
+        }
+
+        // アニメーションを開始
+        draw();
+    </script>
+</body>
+</html>
