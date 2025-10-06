@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チェーン店ラーメン当てクイズゲーム</title>
+    <style>
+        /* --- CSS: デザイン設定 --- */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 50px;
+        }
+        .container {
+            background: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 600px;
+        }
+        h1 {
+            color: #d9534f;
+            text-align: center;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .question-box {
+            background-color: #ffe0b2; /* 薄いオレンジ */
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .question-box p {
+            margin-top: 0;
+        }
+        #image-link a {
+            color: #007bff;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        #image-link a:hover {
+            text-decoration: underline;
+        }
+        input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #5cb85c; /* 緑 */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #4cae4c;
+        }
+        #feedback {
+            margin-top: 15px;
+            font-size: 1.1em;
+            font-weight: bold;
+            text-align: center;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .correct { background-color: #d4edda; color: #155724; } /* 薄い緑 */
+        .incorrect { background-color: #f8d7da; color: #721c24; } /* 薄い赤 */
+        
+        #results {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #d9534f;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1> チェーン店ラーメン当てクイズゲーム </h1>
+    
+    <div id="quiz-container">
+        <div class="question-box">
+            <p><strong>ヒント:</strong> <span id="hint-text"></span></p>
+            <p id="image-link"><strong>画像URL:</strong> <a id="url-text" href="#" target="_blank"></a></p>
+        </div>
+        
+        <h2>第 <span id="question-number">1</span> 問</h2>
+        <input type="text" id="user-input" placeholder="店名を入力してください (例: 一蘭)">
+        <button id="submit-button" onclick="checkAnswer()">回答する</button>
+
+        <div id="feedback"></div>
+    </div>
+    
+    <div id="results" style="display:none;">
+        </div>
+</div>
+
+<script>
+    // --- JavaScript: ロジック設定 ---
+
+    // 問題データリスト
+    // 【重要】ゲームを始める前に、ご自身で画像を検索し、URLを貼り付けて問題を完成させてください。
+    const quizData = [
+        {
+            // 一蘭のとんこつラーメン画像（検索結果）
+            url: "http://googleusercontent.com/image_collection/image_retrieval/11748455279520892921_0",
+            answer: "一蘭",
+            hint: "赤い秘伝のタレと『味集中カウンター』が特徴のチェーン店。"
+        },
+        {
+            // 【ここに「博多一風堂」の画像URLを挿入】
+            url: "【博多一風堂の画像URL】",
+            answer: "博多一風堂",
+            hint: "『赤丸新味』と『白丸元味』の2種類が有名なグローバルチェーン。"
+        },
+        {
+            // 【ここに「ラーメン山岡家」の画像URLを挿入】
+            url: "【ラーメン山岡家 の画像URL】",
+            answer: "ラーメン山岡家",
+            hint: "独特の豚骨臭と24時間営業で知られるチェーン店。"
+        },
+        {
+            // 【ここに「天下一品」のこってりラーメン画像URLを挿入】
+            url: "【天下一品の画像URL】",
+            answer: "天下一品",
+            hint: "『こってり』スープが泥のように濃厚なことで有名なチェーン店。"
+        },
+        {
+            // 【ここに「日高屋」の中華そば画像URLを挿入】
+            url: "【日高屋の画像URL】",
+            answer: "日高屋",
+            hint: "低価格で『中華そば』や餃子を提供する、駅前によくある中華食堂チェーン。"
+        }
+    ];
+
+    let currentQuestionIndex = 0;
+    let score = 0;
+    let shuffledQuestions = [];
+
+    // ----------------------------------------------------
+    
+    // ゲーム開始時の初期化
+    function startGame() {
+        // 画像URLが設定されている問題のみを抽出
+        shuffledQuestions = quizData.filter(q => !q.url.includes('【') && !q.url.includes('】'));
+        
+        if (shuffledQuestions.length === 0) {
+            document.getElementById('quiz-container').innerHTML = 
+                "<p style='color:red;'><strong>全ての問題の画像URLが未設定のため、ゲームを開始できません。URLを設定してからファイルを保存し直してください。</strong></p>";
+            return;
+        }
+
+        // 問題をシャッフル
+        shuffledQuestions.sort(() => Math.random() - 0.5);
+        currentQuestionIndex = 0;
+        score = 0;
+        document.getElementById('results').style.display = 'none';
+        document.getElementById('quiz-container').style.display = 'block';
+        displayQuestion();
+    }
+
+    // 問題の表示
+    function displayQuestion() {
+        if (currentQuestionIndex >= shuffledQuestions.length) {
+            showResults();
+            return;
+        }
+
+        const question = shuffledQuestions[currentQuestionIndex];
+        
+        document.getElementById('question-number').textContent = currentQuestionIndex + 1;
+        document.getElementById('hint-text').textContent = question.hint;
+        
+        // 画像URLをリンクとして設定
+        const urlElement = document.getElementById('url-text');
+        urlElement.textContent = question.url;
+        urlElement.href = question.url;
+        
+        document.getElementById('user-input').value = ''; // 入力欄をクリア
+        document.getElementById('feedback').textContent = ''; // フィードバックをクリア
+        document.getElementById('feedback').className = ''; 
+        document.getElementById('submit-button').textContent = '回答する';
+        document.getElementById('submit-button').onclick = checkAnswer;
+    }
+
+    // 回答のチェック
+    function checkAnswer() {
+        const inputElement = document.getElementById('user-input');
+        const userAnswer = inputElement.value.trim().replace(/\s/g, '').toLowerCase();
+        const correctAnswer = shuffledQuestions[currentQuestionIndex].answer.trim().replace(/\s/g, '').toLowerCase();
+        const feedbackElement = document.getElementById('feedback');
+
+        // 回答が空の場合はスキップ
+        if (userAnswer === '') {
+            feedbackElement.textContent = '店名を入力してください。';
+            feedbackElement.className = 'incorrect';
+            return;
+        }
+
+        if (userAnswer === correctAnswer) {
+            feedbackElement.textContent = ' 正解です！お見事！ ';
+            feedbackElement.className = 'correct';
+            score++;
+        } else {
+            feedbackElement.textContent = ` 残念！正解は【${shuffledQuestions[currentQuestionIndex].answer}】でした。`;
+            feedbackElement.className = 'incorrect';
+        }
+        
+        // 次のステップへ進むボタンに変更
+        const button = document.getElementById('submit-button');
+        button.textContent = '次の問題へ';
+        button.onclick = nextQuestion;
+    }
+    
+    // 次の問題へ
+    function nextQuestion() {
+        currentQuestionIndex++;
+        displayQuestion();
+    }
+
+    // 結果表示
+    function showResults() {
+        const total = shuffledQuestions.length;
+        document.getElementById('quiz-container').style.display = 'none';
+        const resultsElement = document.getElementById('results');
+        
+        resultsElement.innerHTML = `
+            <h2> ゲーム終了！ </h2>
+            <p>あなたのスコアは <strong>${total} 問中 ${score} 点</strong>でした！</p>
+            <button onclick="startGame()">もう一度プレイ</button>
+        `;
+        resultsElement.style.display = 'block';
+    }
+
+    // ページロード時にゲームを開始
+    window.onload = startGame;
+
+</script>
+</body>
+</html>
